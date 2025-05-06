@@ -5,21 +5,25 @@
 This repository demonstrates a Rust-based approach to audio plugin development that starts with
 the [CLAP](https://cleveraudio.org/) plugin format and extends to VST3 and AU formats using
 the [clap-wrapper](https://github.com/free-audio/clap-wrapper/) project.
-The resulting plugins are self-contained thanks to a static linking approach.
+The resulting plugins are **self-contained** thanks to a static linking approach.
 
-## Example Plugin
+The [clack](https://github.com/prokopyl/clack) crate is used to provide safe Rust wrappers 
+for the CLAP API without adding an opinionated plugin framework.
+
+Uniquely, this example demonstrates exporting **multiple plug-ins from a single binary**!
+To support AU, clap-wrapper's AUv2 plugin factory extension is used.
+
+Bindings for the clap-wrapper extensions are provided by [Prokopyl](https://github.com/prokopyl)!
+I hope for them to be included in clack directly to reduce the required boilerplate for plugins.
+
+> Note: this is only tested on macOS at the moment, I will try Windows builds ASAP!
+
+## Example Gain Plugins
 
 This example exposes two variations of a simple gain plugin:
 
 - **Gain Halver**: Reduces input signal by 50%
 - **Gain Doubler**: Doubles the input signal
-
-The plugin demonstrates:
-
-- Basic CLAP plugin structure in Rust
-- Multi-plugin export from CLAP
-- Support for multi-plugin AU with AUv2 factory
-- Format-specific extension support
 
 ## Requirements
 
@@ -62,7 +66,7 @@ To adapt this example for your own plugin:
 ## Acknowledgements
 
 - [@Prokopyl](https://github.com/prokopyl) for providing Rust bindings for the clap-wrapper's extensions
-- [rust-clap-wrapper-thick](https://github.com/SG60/rust-clap-wrapper-thick) for their pioneering work
+- [SG60/rust-clap-wrapper-thick](https://github.com/SG60/rust-clap-wrapper-thick) for their pioneering work
 
 ## License
 
