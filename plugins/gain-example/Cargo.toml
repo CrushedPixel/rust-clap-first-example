@@ -17,10 +17,5 @@ clack-plugin = { git = "https://github.com/prokopyl/clack.git", rev = "5deaa1b" 
 # by enabling the respective features on clack-extensions
 clack-extensions = { git = "https://github.com/prokopyl/clack.git", rev = "5deaa1b", features = ["audio-ports", "clack-plugin"] }
 
-# The following are needed for the VST3 clap-wrapper support -
-# once that is added to clack, these dependency can go
-clack-common = { git = "https://github.com/prokopyl/clack.git", rev = "5deaa1b" }
-
-# This is the version used by the clack version we're using.
-# Must be compatible to compile correctly.
-clap-sys = "0.4.0"
+# This will hopefully be included in clack soon!
+clap-wrapper-extensions = { path = "../../clap-wrapper-extensions" }

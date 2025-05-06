@@ -4,8 +4,7 @@
 #![allow(non_camel_case_types)]
 
 use clack_plugin::factory::Factory;
-use core::ffi::c_char;
-use core::ffi::CStr;
+use std::ffi::{c_char, CStr};
 use std::panic::{catch_unwind, AssertUnwindSafe};
 
 const CLAP_PLUGIN_FACTORY_INFO_AUV2: &CStr = c"clap.plugin-factory-info-as-auv2.draft0";

@@ -7,13 +7,13 @@ the [CLAP](https://cleveraudio.org/) plugin format and extends to VST3 and AU fo
 the [clap-wrapper](https://github.com/free-audio/clap-wrapper/) project.
 The resulting plugins are **self-contained** thanks to a static linking approach.
 
-The [clack](https://github.com/prokopyl/clack) crate is used to provide safe Rust wrappers 
+The [clack](https://github.com/prokopyl/clack) crate is used to provide safe Rust wrappers
 for the CLAP API without adding an opinionated plugin framework.
 
 Uniquely, this example demonstrates exporting **multiple plug-ins from a single binary**!
 To support AU, clap-wrapper's AUv2 plugin factory extension is used.
 
-Bindings for the clap-wrapper extensions are provided by [Prokopyl](https://github.com/prokopyl)!
+Bindings for the clap-wrapper extensions are provided in [clap-wrapper-extensions](./clap-wrapper-extensions).
 I hope for them to be included in clack directly to reduce the required boilerplate for plugins.
 
 > Note: this is only tested on macOS at the moment, I will try Windows builds ASAP!

@@ -1,0 +1,15 @@
+[package]
+name = "clap-wrapper-extensions"
+version = "0.1.0"
+edition = "2021" # required for c-string literals
+
+[dependencies]
+clack-plugin = { git = "https://github.com/prokopyl/clack.git", rev = "5deaa1b" }
+
+# The following are needed for the VST3 clap-wrapper support -
+# once that is added to clack, these dependency can go
+clack-common = { git = "https://github.com/prokopyl/clack.git", rev = "5deaa1b" }
+
+# This is the version used by the clack version we're using.
+# Must be compatible to compile correctly.
+clap-sys = "0.4.0"

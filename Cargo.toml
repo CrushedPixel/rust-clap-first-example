@@ -1,5 +1,5 @@
 [workspace]
-members = ["xtask", "plugins/*"]
+members = ["xtask", "clap-wrapper-extensions", "plugins/*"]
 resolver = "2"
 
 [workspace.package]

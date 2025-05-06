@@ -104,6 +104,15 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "61b04354981cd059bf376007c9361ded38b15de87972e634670799685b042197"
 
 [[package]]
+name = "clap-wrapper-extensions"
+version = "0.1.0"
+dependencies = [
+ "clack-common",
+ "clack-plugin",
+ "clap-sys",
+]
+
+[[package]]
 name = "clap_builder"
 version = "4.5.37"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -143,10 +152,9 @@ checksum = "5b63caa9aa9397e2d9480a9b13673856c78d8ac123288526c37d7839f2a86990"
 name = "gain-example"
 version = "0.1.0"
 dependencies = [
- "clack-common",
  "clack-extensions",
  "clack-plugin",
- "clap-sys",
+ "clap-wrapper-extensions",
 ]
 
 [[package]]

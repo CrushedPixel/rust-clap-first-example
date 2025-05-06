@@ -2,19 +2,20 @@
 //! that is exposed behind the CLAP entry points.
 
 mod audio_thread;
-mod ext;
 mod main_thread;
 
 use crate::audio_thread::GainPluginProcessor;
-use crate::ext::auv2::{PluginFactoryAsAUv2, PluginFactoryAsAUv2Wrapper, PluginInfoAsAUv2};
-use crate::ext::vst3::{PluginFactoryAsVST3, PluginInfoAsVST3};
 use crate::main_thread::GainPluginMainThread;
-use clack_common::plugin::features::AUDIO_EFFECT;
 use clack_extensions::audio_ports::PluginAudioPorts;
 use clack_plugin::clack_entry;
 use clack_plugin::entry::prelude::*;
 use clack_plugin::entry::prelude::*;
+use clack_plugin::plugin::features::AUDIO_EFFECT;
 use clack_plugin::prelude::*;
+use clap_wrapper_extensions::auv2::{
+    PluginFactoryAsAUv2, PluginFactoryAsAUv2Wrapper, PluginInfoAsAUv2,
+};
+use clap_wrapper_extensions::vst3::{PluginFactoryAsVST3, PluginInfoAsVST3};
 use std::ffi::CStr;
 
 pub struct GainPlugin;
