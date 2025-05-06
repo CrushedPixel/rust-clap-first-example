@@ -1,0 +1,9 @@
+[package]
+name = "xtask"
+version = "0.1.0"
+edition = "2021"
+publish = false
+
+[dependencies]
+# this is clap the command line parser, not the CLAP plugin API!
+clap = { version = "4.5.31", features = ["derive"] }
