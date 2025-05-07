@@ -13,7 +13,7 @@ struct clap_version {
 };
 
 struct clap_plugin_entry {
-  clap_version clap_version;
+  clap_version version;
   bool (*init)(const char *plugin_path);
   void (*deinit)();
   const void *(*get_factory)(const char *factory_id);
