@@ -16,14 +16,14 @@ To support AU, clap-wrapper's AUv2 plugin factory extension is used.
 Bindings for the clap-wrapper extensions are provided in [clap-wrapper-extensions](./clap-wrapper-extensions).
 I hope for them to be included in clack directly to reduce the required boilerplate for plugins.
 
-> Note: this is only tested on macOS at the moment, I will try Windows builds ASAP!
+> This has been tested on **macOS** and **Windows**. Linux support needs your Pull Request!
 
 ## Example Gain Plugins
 
 This example exposes two variations of a simple gain plugin:
 
-- **Gain Halver**: Reduces input signal by 50%
-- **Gain Doubler**: Doubles the input signal
+- **Gain Halver**: Multiplies signal with 0.5
+- **Gain Doubler**: Multiplies signal with 2.0
 
 ## Requirements
 

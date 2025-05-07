@@ -105,9 +105,17 @@ fn build_plugin(
     let profile = if release { "release" } else { "debug" };
     let target_dir = project_root.join("target").join(profile);
 
-    // Find the static library file
-    let lib_name = format!("lib{}.a", crate_name.replace('-', "_"));
-    let static_lib_file = target_dir.join(&lib_name);
+    // Generate the library name based on the platform
+    let normalized_crate_name = crate_name.replace('-', "_");
+
+    // Determine the static library name based on the platform
+    let static_lib_file = if cfg!(windows) {
+        // On Windows, the static library is named: crate_name.lib
+        target_dir.join(format!("{}.lib", normalized_crate_name))
+    } else {
+        // On Unix-like systems (Linux, macOS), the static library is named: libcrate_name.a
+        target_dir.join(format!("lib{}.a", normalized_crate_name))
+    };
 
     if !static_lib_file.exists() {
         return Err(format!(
