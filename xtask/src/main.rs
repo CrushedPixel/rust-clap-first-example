@@ -1,4 +1,5 @@
 use clap::{Parser, Subcommand};
+use std::fs;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
@@ -74,8 +75,9 @@ fn build_plugin(
     // Clean if requested
     if clean {
         println!("Cleaning build directories...");
-        let _ = std::fs::remove_dir_all(project_root.join("target/plugins"));
-        let _ = std::fs::remove_dir_all(project_root.join("target/cmake-build"));
+        let _ = fs::remove_dir_all(project_root.join("target/plugins"));
+        let _ = fs::remove_dir_all(project_root.join("target/cmake-build"));
+        let _ = fs::remove_dir_all(project_root.join("target/cmake-assets"));
     }
 
     // Build the static library
@@ -129,7 +131,7 @@ fn build_plugin(
 
     // Create the CMake build directory
     let cmake_build_dir = project_root.join("target/cmake-build");
-    std::fs::create_dir_all(&cmake_build_dir)?;
+    fs::create_dir_all(&cmake_build_dir)?;
 
     // Path to the CMake script and source files
     let cmake_dir = project_root.join("xtask/cmake");
@@ -143,13 +145,17 @@ fn build_plugin(
     }
 
     // Copy files required for CMake build to the build directory
-    std::fs::copy(&clap_entry_cpp, cmake_build_dir.join("clap_entry.cpp"))?;
-    std::fs::copy(&clap_entry_h, cmake_build_dir.join("clap_entry.h"))?;
-    std::fs::copy(&build_cmake, cmake_build_dir.join("CMakeLists.txt"))?;
+    fs::copy(&clap_entry_cpp, cmake_build_dir.join("clap_entry.cpp"))?;
+    fs::copy(&clap_entry_h, cmake_build_dir.join("clap_entry.h"))?;
+    fs::copy(&build_cmake, cmake_build_dir.join("CMakeLists.txt"))?;
 
-    // Plugin output directory
-    let plugin_output_dir = project_root.join(target_dir.join("plugins"));
-    std::fs::create_dir_all(&plugin_output_dir)?;
+    // Create a temporary assets directory for CMake output
+    let cmake_assets_dir = project_root.join("target/cmake-assets");
+    fs::create_dir_all(&cmake_assets_dir)?;
+
+    // Final plugin output directory
+    let plugin_output_dir = project_root.join("target").join(profile).join("plugins");
+    fs::create_dir_all(&plugin_output_dir)?;
 
     // Run CMake to configure the build
     println!("Configuring CMake build...");
@@ -165,7 +171,7 @@ fn build_plugin(
         .arg(format!("-DBUNDLE_ID={}", bundle_id))
         .arg(format!(
             "-DPLUGIN_OUTPUT_DIR={}",
-            plugin_output_dir.display()
+            cmake_assets_dir.display()
         ))
         .arg(format!(
             "-DINSTALL_PLUGINS_AFTER_BUILD={}",
@@ -192,8 +198,96 @@ fn build_plugin(
         return Err("Plugin build failed".into());
     }
 
+    // Copy the plugin files from the CMake output directory to the final plugin directory
+    println!("Copying plugin files to final destination...");
+    copy_plugin_files(&cmake_assets_dir, &plugin_output_dir, &formats, &profile)?;
+
     println!("Build completed successfully!");
     println!("Plugins are available in: {}", plugin_output_dir.display());
+
+    Ok(())
+}
+
+/// Copy plugin files from CMake output to final destination
+fn copy_plugin_files(
+    source_dir: &Path,
+    dest_dir: &Path,
+    formats: &str,
+    profile: &str,
+) -> Result<(), Box<dyn std::error::Error>> {
+    let formats_list: Vec<&str> = formats.split(',').collect();
+
+    // Create destination directory if it doesn't exist
+    fs::create_dir_all(dest_dir)?;
+
+    // Handle platform-specific differences
+    if cfg!(target_os = "macos") {
+        // On macOS, files are output directly in the specified directory
+        copy_dir_contents(source_dir, dest_dir)?;
+    } else if cfg!(target_os = "windows") {
+        // On Windows, we need to handle the nested structure
+        for format in &formats_list {
+            let format_source_dir = source_dir.join(format).join(profile);
+            if format_source_dir.exists() {
+                for entry in fs::read_dir(&format_source_dir)? {
+                    let entry = entry?;
+                    let source_path = entry.path();
+                    if source_path.is_file() {
+                        let dest_path = dest_dir.join(source_path.file_name().unwrap());
+                        fs::copy(&source_path, &dest_path)?;
+                    } else if source_path.is_dir() {
+                        let dest_subdir = dest_dir.join(source_path.file_name().unwrap());
+                        copy_dir_recursive(&source_path, &dest_subdir)?;
+                    }
+                }
+            }
+        }
+    } else {
+        // For Linux or other platforms, use a simple directory copy
+        copy_dir_contents(source_dir, dest_dir)?;
+    }
+
+    Ok(())
+}
+
+/// Copy all files and directories recursively
+fn copy_dir_recursive(source: &Path, dest: &Path) -> Result<(), Box<dyn std::error::Error>> {
+    if !dest.exists() {
+        fs::create_dir_all(dest)?;
+    }
+
+    for entry in fs::read_dir(source)? {
+        let entry = entry?;
+        let path = entry.path();
+        let dest_path = dest.join(path.file_name().unwrap());
+
+        if path.is_dir() {
+            copy_dir_recursive(&path, &dest_path)?;
+        } else {
+            fs::copy(path, dest_path)?;
+        }
+    }
+
+    Ok(())
+}
+
+/// Copy contents of a directory (non-recursive)
+fn copy_dir_contents(source: &Path, dest: &Path) -> Result<(), Box<dyn std::error::Error>> {
+    if !dest.exists() {
+        fs::create_dir_all(dest)?;
+    }
+
+    for entry in fs::read_dir(source)? {
+        let entry = entry?;
+        let path = entry.path();
+        let dest_path = dest.join(path.file_name().unwrap());
+
+        if path.is_dir() {
+            copy_dir_recursive(&path, &dest_path)?;
+        } else {
+            fs::copy(path, dest_path)?;
+        }
+    }
 
     Ok(())
 }
