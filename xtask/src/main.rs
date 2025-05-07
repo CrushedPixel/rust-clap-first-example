@@ -28,10 +28,6 @@ enum Commands {
         #[arg(long, default_value = "org.free-audio.rust-gain-example")]
         bundle_id: String,
 
-        /// Plugin formats to build (comma-separated: CLAP,VST3,AUV2)
-        #[arg(long, default_value = "CLAP,VST3,AUV2")]
-        formats: String,
-
         /// Clean build directories first
         #[arg(long)]
         clean: bool,
@@ -51,10 +47,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             crate_name,
             release,
             bundle_id,
-            formats,
             clean,
             install,
-        } => build_plugin(crate_name, release, bundle_id, formats, clean, install)?,
+        } => build_plugin(crate_name, release, bundle_id, clean, install)?,
     }
 
     Ok(())
@@ -65,7 +60,6 @@ fn build_plugin(
     crate_name: String,
     release: bool,
     bundle_id: String,
-    formats: String,
     clean: bool,
     install: bool,
 ) -> Result<(), Box<dyn std::error::Error>> {
@@ -75,9 +69,9 @@ fn build_plugin(
     // Clean if requested
     if clean {
         println!("Cleaning build directories...");
-        let _ = fs::remove_dir_all(project_root.join("target/plugins"));
         let _ = fs::remove_dir_all(project_root.join("target/cmake-build"));
         let _ = fs::remove_dir_all(project_root.join("target/cmake-assets"));
+        let _ = fs::remove_dir_all(project_root.join("target/plugins"));
     }
 
     // Build the static library
@@ -177,7 +171,6 @@ fn build_plugin(
             "-DINSTALL_PLUGINS_AFTER_BUILD={}",
             if install { "ON" } else { "OFF" }
         ))
-        .arg(format!("-DPLUGIN_FORMATS={}", formats))
         .status()?;
 
     if !status.success() {
@@ -200,7 +193,7 @@ fn build_plugin(
 
     // Copy the plugin files from the CMake output directory to the final plugin directory
     println!("Copying plugin files to final destination...");
-    copy_plugin_files(&cmake_assets_dir, &plugin_output_dir, &formats, &profile)?;
+    copy_plugin_files(&cmake_assets_dir, &plugin_output_dir, &profile)?;
 
     println!("Build completed successfully!");
     println!("Plugins are available in: {}", plugin_output_dir.display());
@@ -212,21 +205,15 @@ fn build_plugin(
 fn copy_plugin_files(
     source_dir: &Path,
     dest_dir: &Path,
-    formats: &str,
     profile: &str,
 ) -> Result<(), Box<dyn std::error::Error>> {
-    let formats_list: Vec<&str> = formats.split(',').collect();
-
     // Create destination directory if it doesn't exist
     fs::create_dir_all(dest_dir)?;
 
     // Handle platform-specific differences
-    if cfg!(target_os = "macos") {
-        // On macOS, files are output directly in the specified directory
-        copy_dir_contents(source_dir, dest_dir)?;
-    } else if cfg!(target_os = "windows") {
-        // On Windows, we need to handle the nested structure
-        for format in &formats_list {
+    if cfg!(target_os = "windows") {
+        // On Windows, we need to handle the nested file structure
+        for format in ["VST3", "CLAP"] {
             let format_source_dir = source_dir.join(format).join(profile);
             if format_source_dir.exists() {
                 for entry in fs::read_dir(&format_source_dir)? {
@@ -243,8 +230,9 @@ fn copy_plugin_files(
             }
         }
     } else {
-        // For Linux or other platforms, use a simple directory copy
-        copy_dir_contents(source_dir, dest_dir)?;
+        // On macOS, files are output directly in the asset output directory.
+        // it's a sensible default for Linux as well
+        copy_dir_recursive(source_dir, dest_dir)?;
     }
 
     Ok(())
@@ -252,27 +240,6 @@ fn copy_plugin_files(
 
 /// Copy all files and directories recursively
 fn copy_dir_recursive(source: &Path, dest: &Path) -> Result<(), Box<dyn std::error::Error>> {
-    if !dest.exists() {
-        fs::create_dir_all(dest)?;
-    }
-
-    for entry in fs::read_dir(source)? {
-        let entry = entry?;
-        let path = entry.path();
-        let dest_path = dest.join(path.file_name().unwrap());
-
-        if path.is_dir() {
-            copy_dir_recursive(&path, &dest_path)?;
-        } else {
-            fs::copy(path, dest_path)?;
-        }
-    }
-
-    Ok(())
-}
-
-/// Copy contents of a directory (non-recursive)
-fn copy_dir_contents(source: &Path, dest: &Path) -> Result<(), Box<dyn std::error::Error>> {
     if !dest.exists() {
         fs::create_dir_all(dest)?;
     }
