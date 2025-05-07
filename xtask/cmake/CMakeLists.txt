@@ -10,18 +10,37 @@ project(${PROJECT_NAME})
 # ==============================================================================
 # Platform and Compiler Settings
 # ==============================================================================
-set(CMAKE_OSX_DEPLOYMENT_TARGET 15.4) # TODO: can we lower this?
+set(CMAKE_CXX_STANDARD 17)
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_POSITION_INDEPENDENT_CODE ON)
 
 # macOS Audio Unit SDK requirements
 if (APPLE)
-    set(CMAKE_CXX_STANDARD 17)
     enable_language(OBJC)
     enable_language(OBJCXX)
+    set(CMAKE_OSX_DEPLOYMENT_TARGET 15.4) # TODO: can we lower this?
     set(CMAKE_OBJC_VISIBILITY_PRESET hidden)
     set(CMAKE_OBJCXX_VISIBILITY_PRESET hidden)
     set(CMAKE_VISIBILITY_INLINES_HIDDEN ON)
 endif ()
+
+# Windows specific settings
+if (WIN32)
+    add_compile_definitions(_SILENCE_ALL_CXX17_DEPRECATION_WARNINGS)
+    
+    # Set MSVC runtime library to static linking
+    if(MSVC)
+        set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>")
+        add_compile_options(/MP)  # Enable multi-processor compilation
+    endif()
+    
+    # Add required Windows libraries
+    set(WINDOWS_LIBS 
+        ws2_32     # For network functionality
+        userenv    # For user profile functions
+        ntdll      # For NT API functions
+    )
+endif()
 
 # Always build static libraries unless explicitly specified otherwise
 set(BUILD_SHARED_LIBS OFF CACHE BOOL "Never want shared if not specified")
@@ -42,7 +61,6 @@ include(${CMAKE_CURRENT_BINARY_DIR}/cmake/CPM.cmake)
 set(BUILD_SHARED_LIBS OFF CACHE BOOL "Never want shared if not specified")
 set(CLAP_WRAPPER_DOWNLOAD_DEPENDENCIES ON)
 set(CLAP_WRAPPER_DONT_ADD_TARGETS ON CACHE BOOL "I'll targetize")
-set(CLAP_WRAPPER_BUILD_AUV2 ON CACHE BOOL "It's only logical")
 
 # Add CLAP wrapper package
 CPMAddPackage(
@@ -84,7 +102,7 @@ set_target_properties(rust_static_lib PROPERTIES
 add_library(clap_entry STATIC "clap_entry.cpp")
 target_link_libraries(clap_entry PRIVATE rust_static_lib)
 
-# Link required macOS frameworks
+# Link required platform-specific libraries
 if (APPLE)
     target_link_libraries(clap_entry PUBLIC
             "-framework Foundation"
@@ -96,7 +114,9 @@ if (APPLE)
             "-framework AudioUnit"
             "-framework CoreMIDI"
     )
-endif ()
+elseif(WIN32)
+    target_link_libraries(clap_entry PUBLIC ${WINDOWS_LIBS})
+endif()
 
 # ==============================================================================
 # Plugin Build Configuration
