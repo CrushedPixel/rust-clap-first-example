@@ -123,6 +123,7 @@ endif()
 # ==============================================================================
 # Use clap-wrapper's make_clapfirst_plugin to build all plugin formats,
 # including the CLAP, from the provided clap_entry implementation
+
 make_clapfirst_plugins(
         TARGET_NAME ${PROJECT_NAME}
         IMPL_TARGET clap_entry
