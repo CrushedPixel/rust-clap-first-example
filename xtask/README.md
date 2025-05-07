@@ -24,7 +24,6 @@ cargo xtask build <CRATE_NAME> [OPTIONS]
 |-----------------------|---------------------------------------------------------------------------------|
 | `--release`           | Build using the release profile. Default is debug.                              |
 | `--bundle-id <ID>`    | Set bundle identifier (default: "org.free-audio.rust-gain-example")             |
-| `--formats <FORMATS>` | Comma-separated list of formats to build (default: "CLAP,VST3,AUV2")            |
 | `--clean`             | Clean build directories before building                                         |
 | `--install`           | Install plugins to system directories after building (not supported on Windows) |
 
@@ -37,10 +36,6 @@ cargo xtask build gain-example
 # Release build with custom bundle ID
 cargo xtask build gain-example --release --bundle-id "com.mycompany.myplugin"
 
-# Build only CLAP and VST3 formats
-cargo xtask build gain-example --formats "CLAP,VST3"
-
-# Clean build with installation
 cargo xtask build gain-example --clean --install
 ```
 
