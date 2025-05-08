@@ -74,43 +74,50 @@ fn build_plugin(
         let _ = fs::remove_dir_all(project_root.join("target/plugins"));
     }
 
-    // Build the static library
-    println!("Building static library for crate '{}'...", crate_name);
-
-    let mut cargo_args = vec!["build"];
-
-    // Configure build profile
-    if release {
-        cargo_args.push("--release");
-    }
-
-    // Add the crate to build
-    cargo_args.push("-p");
-    cargo_args.push(&crate_name);
-
-    let status = Command::new("cargo")
-        .args(&cargo_args)
-        .current_dir(&project_root)
-        .status()?;
-
-    if !status.success() {
-        return Err("Failed to build static library".into());
-    }
+    // Normalize crate name for file naming
+    let normalized_crate_name = crate_name.replace('-', "_");
 
     // Determine the output directory based on build profile
     let profile = if release { "release" } else { "debug" };
-    let target_dir = project_root.join("target").join(profile);
 
-    // Generate the library name based on the platform
-    let normalized_crate_name = crate_name.replace('-', "_");
-
-    // Determine the static library name based on the platform
-    let static_lib_file = if cfg!(windows) {
-        // On Windows, the static library is named: crate_name.lib
-        target_dir.join(format!("{}.lib", normalized_crate_name))
+    let static_lib_file = if cfg!(target_os = "macos") {
+        // on macOS, build for both architectures
+        // and create a universal binary using lipo
+        build_universal_macos_binary(&project_root, &crate_name, &normalized_crate_name, release)?
     } else {
-        // On Unix-like systems (Linux, macOS), the static library is named: libcrate_name.a
-        target_dir.join(format!("lib{}.a", normalized_crate_name))
+        // Regular build for the current architecture
+        println!("Building static library for crate '{}'...", crate_name);
+
+        let mut cargo_args = vec!["build"];
+
+        // Configure build profile
+        if release {
+            cargo_args.push("--release");
+        }
+
+        // Add the crate to build
+        cargo_args.push("-p");
+        cargo_args.push(&crate_name);
+
+        let status = Command::new("cargo")
+            .args(&cargo_args)
+            .current_dir(&project_root)
+            .status()?;
+
+        if !status.success() {
+            return Err("Failed to build static library".into());
+        }
+
+        let target_dir = project_root.join("target").join(profile);
+
+        // Determine the static library name based on the platform
+        if cfg!(windows) {
+            // On Windows, the static library is named: crate_name.lib
+            target_dir.join(format!("{}.lib", normalized_crate_name))
+        } else {
+            // On Unix-like systems (Linux, macOS), the static library is named: libcrate_name.a
+            target_dir.join(format!("lib{}.a", normalized_crate_name))
+        }
     };
 
     if !static_lib_file.exists() {
@@ -154,23 +161,24 @@ fn build_plugin(
     // Run CMake to configure the build
     println!("Configuring CMake build...");
 
-    let status = Command::new("cmake")
-        .current_dir(&cmake_build_dir)
-        .arg("-S")
-        .arg(cmake_dir)
-        .arg("-B")
-        .arg(&cmake_build_dir)
-        .arg(format!("-DPROJECT_NAME={}", crate_name))
-        .arg(format!("-DSTATIC_LIB_FILE={}", static_lib_file.display()))
-        .arg(format!("-DBUNDLE_ID={}", bundle_id))
-        .arg(format!(
-            "-DPLUGIN_OUTPUT_DIR={}",
-            cmake_assets_dir.display()
-        ))
-        .arg(format!(
+    let mut cmake_args = vec![
+        "-S".to_string(),
+        cmake_dir.display().to_string(),
+        "-B".to_string(),
+        cmake_build_dir.display().to_string(),
+        format!("-DPROJECT_NAME={}", crate_name),
+        format!("-DSTATIC_LIB_FILE={}", static_lib_file.display()),
+        format!("-DBUNDLE_ID={}", bundle_id),
+        format!("-DPLUGIN_OUTPUT_DIR={}", cmake_assets_dir.display()),
+        format!(
             "-DINSTALL_PLUGINS_AFTER_BUILD={}",
             if install { "ON" } else { "OFF" }
-        ))
+        ),
+    ];
+
+    let status = Command::new("cmake")
+        .current_dir(&cmake_build_dir)
+        .args(&cmake_args)
         .status()?;
 
     if !status.success() {
@@ -199,6 +207,120 @@ fn build_plugin(
     println!("Plugins are available in: {}", plugin_output_dir.display());
 
     Ok(())
+}
+
+/// Build a universal binary for macOS by building for both architectures and combining with lipo
+fn build_universal_macos_binary(
+    project_root: &Path,
+    crate_name: &str,
+    normalized_crate_name: &str,
+    release: bool,
+) -> Result<PathBuf, Box<dyn std::error::Error>> {
+    // Ensure both targets are available
+    let status = Command::new("rustup")
+        .args(&[
+            "target",
+            "add",
+            "x86_64-apple-darwin",
+            "aarch64-apple-darwin",
+        ])
+        .status()?;
+
+    if !status.success() {
+        return Err("Failed to add required targets".into());
+    }
+
+    // Build profile
+    let profile = if release { "release" } else { "debug" };
+
+    // Build for x86_64 (Intel)
+    println!("Building for x86_64-apple-darwin...");
+    let mut cargo_args = vec!["build"];
+
+    if release {
+        cargo_args.push("--release");
+    }
+
+    cargo_args.extend(&["--target", "x86_64-apple-darwin", "-p", crate_name]);
+
+    let status = Command::new("cargo")
+        .args(&cargo_args)
+        .current_dir(project_root)
+        .status()?;
+
+    if !status.success() {
+        return Err("Failed to build for x86_64-apple-darwin".into());
+    }
+
+    // Build for arm64 (Apple Silicon)
+    println!("Building for aarch64-apple-darwin...");
+    let mut cargo_args = vec!["build"];
+
+    if release {
+        cargo_args.push("--release");
+    }
+
+    cargo_args.extend(&["--target", "aarch64-apple-darwin", "-p", crate_name]);
+
+    let status = Command::new("cargo")
+        .args(&cargo_args)
+        .current_dir(project_root)
+        .status()?;
+
+    if !status.success() {
+        return Err("Failed to build for aarch64-apple-darwin".into());
+    }
+
+    // Path to the x86_64 and arm64 libraries
+    let x86_64_lib = project_root
+        .join("target")
+        .join("x86_64-apple-darwin")
+        .join(profile)
+        .join(format!("lib{}.a", normalized_crate_name));
+
+    let arm64_lib = project_root
+        .join("target")
+        .join("aarch64-apple-darwin")
+        .join(profile)
+        .join(format!("lib{}.a", normalized_crate_name));
+
+    // Create output directory for universal binary
+    let universal_dir = project_root.join("target").join("universal");
+    fs::create_dir_all(&universal_dir)?;
+
+    // Path for the universal library
+    let universal_lib = universal_dir.join(format!("lib{}.a", normalized_crate_name));
+
+    // Use lipo to create universal binary
+    println!(
+        "Creating universal binary with lipo: {}",
+        universal_lib.display()
+    );
+    let status = Command::new("lipo")
+        .args(&[
+            "-create",
+            &x86_64_lib.to_string_lossy(),
+            &arm64_lib.to_string_lossy(),
+            "-output",
+            &universal_lib.to_string_lossy(),
+        ])
+        .status()?;
+
+    if !status.success() {
+        return Err("Failed to create universal binary with lipo".into());
+    }
+
+    // Verify the universal binary
+    let output = Command::new("lipo")
+        .args(&["-info", &universal_lib.to_string_lossy()])
+        .output()?;
+
+    if output.status.success() {
+        let info = String::from_utf8_lossy(&output.stdout);
+        println!("Universal binary info: {}", info.trim());
+    }
+
+    Ok(universal_lib)
 }
 
 /// Copy plugin files from CMake output to final destination
