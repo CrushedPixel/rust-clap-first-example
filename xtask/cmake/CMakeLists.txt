@@ -18,7 +18,11 @@ set(CMAKE_POSITION_INDEPENDENT_CODE ON)
 if (APPLE)
     enable_language(OBJC)
     enable_language(OBJCXX)
+
     set(CMAKE_OSX_DEPLOYMENT_TARGET 15.4) # TODO: can we lower this?
+    # Build universal binary (Intel + Apple Silicon)
+    set(CMAKE_OSX_ARCHITECTURES "x86_64;arm64")
+
     set(CMAKE_OBJC_VISIBILITY_PRESET hidden)
     set(CMAKE_OBJCXX_VISIBILITY_PRESET hidden)
     set(CMAKE_VISIBILITY_INLINES_HIDDEN ON)
@@ -114,9 +118,9 @@ if (APPLE)
             "-framework AudioUnit"
             "-framework CoreMIDI"
     )
-elseif(WIN32)
+elseif (WIN32)
     target_link_libraries(clap_entry PUBLIC ${WINDOWS_LIBS})
-endif()
+endif ()
 
 # ==============================================================================
 # Plugin Build Configuration

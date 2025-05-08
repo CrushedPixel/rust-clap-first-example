@@ -1,7 +1,7 @@
 # Rust CLAP-First Plugin Example
 
 > Write a CLAP plugin in Rust, get self-contained AU and VST3 plugins for free!
-> Supports Windows, macOS and Linux.
+> Supports Windows, Linux, and macOS (universal binary x86_64 + arm64)
 
 This repository demonstrates a Rust-based approach to audio plugin development that starts with
 the [CLAP](https://cleveraudio.org/) plugin format and extends to VST3 and AU formats using
