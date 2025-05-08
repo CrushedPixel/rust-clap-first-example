@@ -9,7 +9,6 @@ use crate::main_thread::GainPluginMainThread;
 use clack_extensions::audio_ports::PluginAudioPorts;
 use clack_plugin::clack_entry;
 use clack_plugin::entry::prelude::*;
-use clack_plugin::entry::prelude::*;
 use clack_plugin::plugin::features::AUDIO_EFFECT;
 use clack_plugin::prelude::*;
 use clap_wrapper_extensions::auv2::{

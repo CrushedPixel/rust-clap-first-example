@@ -4,6 +4,7 @@ use crate::main_thread::GainPluginMainThread;
 use clack_plugin::prelude::*;
 
 pub struct GainPluginProcessor<'a> {
+    #[allow(dead_code)] // unused in example
     host: HostAudioProcessorHandle<'a>,
 
     /// The constant factor to multiply incoming samples with.
