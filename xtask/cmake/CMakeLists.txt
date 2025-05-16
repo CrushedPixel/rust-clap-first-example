@@ -19,7 +19,8 @@ if (APPLE)
     enable_language(OBJC)
     enable_language(OBJCXX)
 
-    set(CMAKE_OSX_DEPLOYMENT_TARGET 15.4) # TODO: can we lower this?
+    set(CMAKE_OSX_DEPLOYMENT_TARGET 11.0) # At least Big Sur is needed for MIDI 2.0 in CoreAudio
+    
     # Build universal binary (Intel + Apple Silicon)
     set(CMAKE_OSX_ARCHITECTURES "x86_64;arm64")
 
@@ -31,20 +32,20 @@ endif ()
 # Windows specific settings
 if (WIN32)
     add_compile_definitions(_SILENCE_ALL_CXX17_DEPRECATION_WARNINGS)
-    
+
     # Set MSVC runtime library to static linking
-    if(MSVC)
+    if (MSVC)
         set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>")
         add_compile_options(/MP)  # Enable multi-processor compilation
-    endif()
-    
+    endif ()
+
     # Add required Windows libraries
-    set(WINDOWS_LIBS 
-        ws2_32     # For network functionality
-        userenv    # For user profile functions
-        ntdll      # For NT API functions
+    set(WINDOWS_LIBS
+            ws2_32     # For network functionality
+            userenv    # For user profile functions
+            ntdll      # For NT API functions
     )
-endif()
+endif ()
 
 # Always build static libraries unless explicitly specified otherwise
 set(BUILD_SHARED_LIBS OFF CACHE BOOL "Never want shared if not specified")

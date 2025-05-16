@@ -161,7 +161,7 @@ fn build_plugin(
     // Run CMake to configure the build
     println!("Configuring CMake build...");
 
-    let mut cmake_args = vec![
+    let cmake_args = vec![
         "-S".to_string(),
         cmake_dir.display().to_string(),
         "-B".to_string(),
@@ -216,20 +216,6 @@ fn build_universal_macos_binary(
     normalized_crate_name: &str,
     release: bool,
 ) -> Result<PathBuf, Box<dyn std::error::Error>> {
-    // Ensure both targets are available
-    let status = Command::new("rustup")
-        .args(&[
-            "target",
-            "add",
-            "x86_64-apple-darwin",
-            "aarch64-apple-darwin",
-        ])
-        .status()?;
-
-    if !status.success() {
-        return Err("Failed to add required targets".into());
-    }
-
     // Build profile
     let profile = if release { "release" } else { "debug" };
 
@@ -244,6 +230,7 @@ fn build_universal_macos_binary(
     cargo_args.extend(&["--target", "x86_64-apple-darwin", "-p", crate_name]);
 
     let status = Command::new("cargo")
+        .env("MACOSX_DEPLOYMENT_TARGET", "11.0") // must match CMakeLists.txt
         .args(&cargo_args)
         .current_dir(project_root)
         .status()?;
