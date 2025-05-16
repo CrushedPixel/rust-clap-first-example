@@ -145,10 +145,6 @@ fn build_plugin(
         return Err("Required CMake files not found in xtask/cmake directory".into());
     }
 
-    // Copy files required for CMake build to the build directory
-    fs::copy(&clap_entry_cpp, cmake_build_dir.join("clap_entry.cpp"))?;
-    fs::copy(&clap_entry_h, cmake_build_dir.join("clap_entry.h"))?;
-    fs::copy(&build_cmake, cmake_build_dir.join("CMakeLists.txt"))?;
 
     // Create a temporary assets directory for CMake output
     let cmake_assets_dir = project_root.join("target/cmake-assets");
@@ -177,7 +173,6 @@ fn build_plugin(
     ];
 
     let status = Command::new("cmake")
-        .current_dir(&cmake_build_dir)
         .args(&cmake_args)
         .status()?;
 
@@ -188,9 +183,8 @@ fn build_plugin(
     // Build the plugins
     println!("Building plugins...");
     let status = Command::new("cmake")
-        .current_dir(&cmake_build_dir)
         .arg("--build")
-        .arg(".")
+        .arg(cmake_build_dir.to_str().unwrap())
         .arg("--config")
         .arg(if release { "Release" } else { "Debug" })
         .status()?;
