@@ -83,6 +83,7 @@ set(STATIC_LIB_INCLUDE_DIR "" CACHE PATH "Optional path to the include directory
 set(BUNDLE_ID "org.free-audio.clap-plugin" CACHE STRING "Bundle identifier for the plugin")
 set(PLUGIN_OUTPUT_DIR "${CMAKE_BINARY_DIR}/plugins" CACHE PATH "Output directory to place the built plugins in")
 set(INSTALL_PLUGINS_AFTER_BUILD OFF CACHE BOOL "Whether to install resulting plugins")
+set(NATIVE_LIBRARIES "" CACHE STRING "Additional native libraries for linking")
 
 # Validate required variables
 if (NOT STATIC_LIB_FILE)
@@ -99,12 +100,49 @@ set_target_properties(rust_static_lib PROPERTIES
         IMPORTED_LOCATION "${STATIC_LIB_FILE}"
 )
 
+# Handle any native libraries that need to be linked
+set(NATIVE_LIB_TARGETS "")
+if (NATIVE_LIBRARIES)
+    message(STATUS "Adding native libraries for linking:")
+
+    # Use a map to track already processed libraries
+    set(PROCESSED_LIBS "")
+    set(LIB_COUNTER 0)
+
+    # CMake already handles semicolon-separated lists correctly
+    foreach (LIB_PATH ${NATIVE_LIBRARIES})
+        # Extract just the filename without extension
+        get_filename_component(LIB_FILENAME ${LIB_PATH} NAME)
+        get_filename_component(LIB_NAME ${LIB_PATH} NAME_WE)
+
+        # Create a unique target name, including a counter to avoid duplicates
+        string(MD5 LIB_PATH_HASH "${LIB_PATH}")
+        string(SUBSTRING "${LIB_PATH_HASH}" 0 8 LIB_SHORT_HASH)
+        set(TARGET_NAME "native_${LIB_NAME}_${LIB_SHORT_HASH}")
+        string(MAKE_C_IDENTIFIER "${TARGET_NAME}" TARGET_NAME)
+
+        message(STATUS "  - ${LIB_FILENAME} (${TARGET_NAME}): ${LIB_PATH}")
+
+        # Create an imported target for each native library
+        add_library(${TARGET_NAME} STATIC IMPORTED)
+        set_target_properties(${TARGET_NAME} PROPERTIES
+                IMPORTED_LOCATION "${LIB_PATH}"
+        )
+
+        # Add to our list of native library targets
+        list(APPEND NATIVE_LIB_TARGETS ${TARGET_NAME})
+
+        # Track that we've processed this library
+        math(EXPR LIB_COUNTER "${LIB_COUNTER} + 1")
+    endforeach ()
+endif ()
+
 # ==============================================================================
 # Plugin Target Configuration
 # ==============================================================================
 # Create a CLAP library target that re-exposes the Rust static library's CLAP entry
 add_library(clap_entry STATIC "clap_entry.cpp")
-target_link_libraries(clap_entry PRIVATE rust_static_lib)
+target_link_libraries(clap_entry PRIVATE rust_static_lib ${NATIVE_LIB_TARGETS})
 
 # Link required platform-specific libraries
 if (APPLE)

@@ -1,7 +1,9 @@
 use clap::{Parser, Subcommand};
+use std::collections::HashSet;
 use std::fs;
+use std::io::{BufRead, BufReader};
 use std::path::{Path, PathBuf};
-use std::process::Command;
+use std::process::{Command, Stdio};
 
 #[derive(Debug, Parser)]
 #[command(
@@ -80,15 +82,29 @@ fn build_plugin(
     // Determine the output directory based on build profile
     let profile = if release { "release" } else { "debug" };
 
-    let static_lib_file = if cfg!(target_os = "macos") {
+    // Collect native libraries during the build
+    let (static_lib_file, native_libraries) = if cfg!(target_os = "macos") {
         // on macOS, build for both architectures
         // and create a universal binary using lipo
-        build_universal_macos_binary(&project_root, &crate_name, &normalized_crate_name, release)?
+        let (universal_lib, macos_libs) = build_universal_macos_binary(
+            &project_root,
+            &crate_name,
+            &normalized_crate_name,
+            release,
+        )?;
+        (universal_lib, macos_libs)
     } else {
-        // Regular build for the current architecture
-        println!("Building static library for crate '{}'...", crate_name);
+        // Regular build for the current architecture with verbose output to capture native libraries
+        println!(
+            "Building static library for crate '{}' with verbose output...",
+            crate_name
+        );
 
-        let mut cargo_args = vec!["build"];
+        // Set RUSTFLAGS to get verbose linker output
+        let mut env_vars = std::env::vars().collect::<Vec<_>>();
+        env_vars.push(("RUSTFLAGS".to_string(), "-Wl,--verbose".to_string()));
+
+        let mut cargo_args = vec!["build", "--verbose"];
 
         // Configure build profile
         if release {
@@ -99,25 +115,36 @@ fn build_plugin(
         cargo_args.push("-p");
         cargo_args.push(&crate_name);
 
-        let status = Command::new("cargo")
+        // Run cargo build with verbose output and capture the output
+        let cargo_output = Command::new("cargo")
             .args(&cargo_args)
+            .envs(env_vars)
             .current_dir(&project_root)
-            .status()?;
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped())
+            .output()?;
 
-        if !status.success() {
-            return Err("Failed to build static library".into());
+        if !cargo_output.status.success() {
+            let error_message = String::from_utf8_lossy(&cargo_output.stderr);
+            return Err(format!("Failed to build static library: {}", error_message).into());
         }
+
+        // Parse native library paths from cargo output
+        let native_libs =
+            parse_native_libraries(&cargo_output.stdout, &cargo_output.stderr, &crate_name)?;
 
         let target_dir = project_root.join("target").join(profile);
 
         // Determine the static library name based on the platform
-        if cfg!(windows) {
+        let static_lib = if cfg!(windows) {
             // On Windows, the static library is named: crate_name.lib
             target_dir.join(format!("{}.lib", normalized_crate_name))
         } else {
             // On Unix-like systems (Linux, macOS), the static library is named: libcrate_name.a
             target_dir.join(format!("lib{}.a", normalized_crate_name))
-        }
+        };
+
+        (static_lib, native_libs)
     };
 
     if !static_lib_file.exists() {
@@ -129,6 +156,10 @@ fn build_plugin(
     }
 
     println!("Found static library: {}", static_lib_file.display());
+    println!("Found {} native libraries to link", native_libraries.len());
+    for lib in &native_libraries {
+        println!("  - {}", lib.display());
+    }
 
     // Create the CMake build directory
     let cmake_build_dir = project_root.join("target/cmake-build");
@@ -145,7 +176,6 @@ fn build_plugin(
         return Err("Required CMake files not found in xtask/cmake directory".into());
     }
 
-
     // Create a temporary assets directory for CMake output
     let cmake_assets_dir = project_root.join("target/cmake-assets");
     fs::create_dir_all(&cmake_assets_dir)?;
@@ -157,6 +187,7 @@ fn build_plugin(
     // Run CMake to configure the build
     println!("Configuring CMake build...");
 
+    // Basic CMake arguments
     let mut cmake_args = vec![
         "-S".to_string(),
         cmake_dir.display().to_string(),
@@ -172,9 +203,18 @@ fn build_plugin(
         ),
     ];
 
-    let status = Command::new("cmake")
-        .args(&cmake_args)
-        .status()?;
+    // Add native libraries as a CMake list
+    if !native_libraries.is_empty() {
+        let libs_string = native_libraries
+            .iter()
+            .map(|p| p.display().to_string())
+            .collect::<Vec<_>>()
+            .join(";");
+
+        cmake_args.push(format!("-DNATIVE_LIBRARIES={}", libs_string));
+    }
+
+    let status = Command::new("cmake").args(&cmake_args).status()?;
 
     if !status.success() {
         return Err("CMake configuration failed".into());
@@ -203,13 +243,90 @@ fn build_plugin(
     Ok(())
 }
 
+/// Parse native library paths from cargo output
+fn parse_native_libraries(
+    stdout: &[u8],
+    stderr: &[u8],
+    crate_name: &str,
+) -> Result<Vec<PathBuf>, Box<dyn std::error::Error>> {
+    let mut native_lib_paths = HashSet::new();
+    let mut native_lib_files = Vec::new();
+
+    // Process both stdout and stderr
+    for output in [stdout, stderr].iter() {
+        let reader = BufReader::new(&output[..]);
+        let mut in_target_crate = false;
+
+        for line in reader.lines() {
+            let line = line?;
+
+            // Check if we're in the section for our target crate
+            if line.contains(&format!("--crate-name {}", crate_name.replace('-', "_"))) {
+                in_target_crate = true;
+            }
+
+            // Look for native library paths
+            if in_target_crate && line.contains("-L native=") {
+                // Extract the path after the flag
+                for part in line.split("-L native=").skip(1) {
+                    // Clean up the path (remove quotes, extra args, etc.)
+                    let clean_path = match part.find(|c: char| c.is_whitespace() || c == '`') {
+                        Some(pos) => &part[..pos],
+                        None => part,
+                    }
+                    .trim_matches('"');
+
+                    let path = PathBuf::from(clean_path);
+                    if path.exists() {
+                        native_lib_paths.insert(path);
+                    }
+                }
+            }
+        }
+    }
+
+    println!("Found {} native library paths:", native_lib_paths.len());
+    for path in &native_lib_paths {
+        println!("  Directory: {}", path.display());
+    }
+
+    // Now find actual library files in these directories
+    for dir in native_lib_paths {
+        if dir.exists() && dir.is_dir() {
+            for entry in fs::read_dir(&dir)? {
+                let entry = entry?;
+                let path = entry.path();
+
+                // Check if it's a library file
+                if path.is_file() {
+                    let extension = path.extension().and_then(|e| e.to_str()).unwrap_or("");
+                    let filename = path.file_name().and_then(|n| n.to_str()).unwrap_or("");
+
+                    // Windows: .lib or .dll files
+                    // Unix: .a or .so files or files containing .dylib
+                    if (cfg!(windows) && (extension == "lib" || extension == "dll"))
+                        || (!cfg!(windows)
+                            && (extension == "a"
+                                || extension == "so"
+                                || filename.contains(".dylib")))
+                    {
+                        native_lib_files.push(path);
+                    }
+                }
+            }
+        }
+    }
+
+    Ok(native_lib_files)
+}
+
 /// Build a universal binary for macOS by building for both architectures and combining with lipo
 fn build_universal_macos_binary(
     project_root: &Path,
     crate_name: &str,
     normalized_crate_name: &str,
     release: bool,
-) -> Result<PathBuf, Box<dyn std::error::Error>> {
+) -> Result<(PathBuf, Vec<PathBuf>), Box<dyn std::error::Error>> {
     // Ensure both targets are available
     let status = Command::new("rustup")
         .args(&[
@@ -227,43 +344,47 @@ fn build_universal_macos_binary(
     // Build profile
     let profile = if release { "release" } else { "debug" };
 
-    // Build for x86_64 (Intel)
-    println!("Building for x86_64-apple-darwin...");
-    let mut cargo_args = vec!["build"];
+    // Collect native libraries from both architectures
+    let mut native_libraries = HashSet::new();
 
-    if release {
-        cargo_args.push("--release");
-    }
+    // Function to build for a specific target and collect libraries
+    let build_for_target = |target: &str| -> Result<HashSet<PathBuf>, Box<dyn std::error::Error>> {
+        let mut env_vars = std::env::vars().collect::<Vec<_>>();
+        env_vars.push(("RUSTFLAGS".to_string(), "-Wl,--verbose".to_string()));
 
-    cargo_args.extend(&["--target", "x86_64-apple-darwin", "-p", crate_name]);
+        println!("Building for {}...", target);
 
-    let status = Command::new("cargo")
-        .args(&cargo_args)
-        .current_dir(project_root)
-        .status()?;
+        let mut cargo_args = vec!["build", "--verbose"];
+        if release {
+            cargo_args.push("--release");
+        }
+        cargo_args.extend(&["--target", target, "-p", crate_name]);
 
-    if !status.success() {
-        return Err("Failed to build for x86_64-apple-darwin".into());
-    }
+        let output = Command::new("cargo")
+            .args(&cargo_args)
+            .envs(env_vars)
+            .current_dir(project_root)
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped())
+            .output()?;
 
-    // Build for arm64 (Apple Silicon)
-    println!("Building for aarch64-apple-darwin...");
-    let mut cargo_args = vec!["build"];
+        if !output.status.success() {
+            let error_message = String::from_utf8_lossy(&output.stderr);
+            return Err(format!("Failed to build for {}: {}", target, error_message).into());
+        }
 
-    if release {
-        cargo_args.push("--release");
-    }
+        // Parse libraries
+        let libs = parse_native_libraries(&output.stdout, &output.stderr, crate_name)?;
+        Ok(libs.into_iter().collect())
+    };
 
-    cargo_args.extend(&["--target", "aarch64-apple-darwin", "-p", crate_name]);
+    // Build for each architecture and collect libraries
+    let x86_64_libs = build_for_target("x86_64-apple-darwin")?;
+    let arm64_libs = build_for_target("aarch64-apple-darwin")?;
 
-    let status = Command::new("cargo")
-        .args(&cargo_args)
-        .current_dir(project_root)
-        .status()?;
-
-    if !status.success() {
-        return Err("Failed to build for aarch64-apple-darwin".into());
-    }
+    // Combine libraries from both architectures
+    native_libraries.extend(x86_64_libs);
+    native_libraries.extend(arm64_libs);
 
     // Path to the x86_64 and arm64 libraries
     let x86_64_lib = project_root
@@ -314,7 +435,7 @@ fn build_universal_macos_binary(
         println!("Universal binary info: {}", info.trim());
     }
 
-    Ok(universal_lib)
+    Ok((universal_lib, native_libraries.into_iter().collect()))
 }
 
 /// Copy plugin files from CMake output to final destination
