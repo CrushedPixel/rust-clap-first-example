@@ -1,0 +1,32 @@
+[package]
+name = "web-ui-example"
+version = "0.1.0"
+edition = "2021"
+publish = false
+
+[lib]
+# only a static library is built for this clap-wrapper based approach.
+# the dylib will be generated on the fly by the CMake script.
+crate-type = ["staticlib"]
+
+[dependencies]
+clack-plugin = { git = "https://github.com/prokopyl/clack.git", rev = "5deaa1b" }
+
+# add any additional extensions that you need
+# (params, state, gui, note-ports, ...)
+# by enabling the respective features on clack-extensions
+clack-extensions = { git = "https://github.com/prokopyl/clack.git", rev = "5deaa1b", features = ["clack-plugin", "gui"] }
+
+# This will hopefully be included in clack soon!
+clap-wrapper-extensions = { path = "../../clap-wrapper-extensions" }
+
+# provides the web view
+wry = "0.51.2"
+
+# provides system directory paths.
+# used to determine a folder to save plugin data in.
+dirs = "6.0.0"
+
+# used to open any external links 
+# in the web browser instead of the plugin UI.
+open = "5.3.2"
